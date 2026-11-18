@@ -1,0 +1,74 @@
+// AI Blog Outline to Article Generator — Prisma schema
+//
+// Storage is SQLite (local-first). Each article owns an ordered list of
+// sections. Each section has many Research rows (web_search results) and
+// many SectionVersion rows (every draft is kept as a version for history);
+// `currentDraftId` points at the version that should be rendered/exported.
+//
+// The `citations` field on SectionVersion is a JSON-stringified array of
+// `{ researchId, title, url, snippet, publishedTime? }` — captured at
+// draft time so the export step can re-hydrate footnotes even if the
+// underlying Research rows are later regenerated/deleted.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Article {
+  id        String   @id @default(cuid())
+  title     String
+  topic     String?
+  tone      String   @default("informative")
+  tags      String   @default("") // comma-separated
+  status    String   @default("draft") // "draft" | "published"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sections Section[]
+}
+
+model Section {
+  id             String  @id @default(cuid())
+  articleId      String
+  article        Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  ordinal        Int
+  heading        String
+  angle          String?
+  currentDraftId String?
+  currentDraft   SectionVersion? @relation("CurrentDraft", fields: [currentDraftId], references: [id], onDelete: SetNull)
+  versions       SectionVersion[] @relation("SectionVersions")
+  research       Research[]
+
+  @@index([articleId])
+}
+
+model SectionVersion {
+  id        String   @id @default(cuid())
+  sectionId String
+  section   Section  @relation("SectionVersions", fields: [sectionId], references: [id], onDelete: Cascade)
+  content   String // draft body (markdown with [^cN] markers)
+  citations String   @default("[]") // JSON array of { researchId, title, url, snippet, publishedTime? }
+  createdAt DateTime @default(now())
+
+  @@index([sectionId])
+}
+
+model Research {
+  id           String   @id @default(cuid())
+  sectionId    String
+  section      Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  query        String
+  title        String
+  url          String
+  snippet      String
+  publishedTime String?
+  favicon      String?
+  createdAt    DateTime @default(now())
+
+  @@index([sectionId])
+}
